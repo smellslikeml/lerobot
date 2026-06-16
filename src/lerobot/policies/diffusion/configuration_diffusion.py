@@ -152,6 +152,16 @@ class DiffusionConfig(PreTrainedConfig):
     # Loss computation
     do_mask_loss_for_padding: bool = False
 
+    # Ambient Diffusion Policy (https://arxiv.org/abs/2606.12365): noise-dependent
+    # data usage for co-training on suboptimal / OOD demonstrations. When enabled, a
+    # per-sample quality score (read from `ambient_quality_key` in the batch, in
+    # [0, 1] with 1.0 = clean) restricts the diffusion times at which each sample
+    # contributes to the denoising loss. Clean samples (or a missing quality column)
+    # behave exactly like vanilla Diffusion Policy.
+    use_ambient_loss_masking: bool = False
+    ambient_quality_key: str = "action_quality"
+    ambient_mask_mode: str = "band"  # "band" (suppress mid-noise) or "high" (suppress low-noise)
+
     # Training presets
     optimizer_lr: float = 1e-4
     optimizer_betas: tuple = (0.95, 0.999)
@@ -179,6 +189,13 @@ class DiffusionConfig(PreTrainedConfig):
             raise ValueError(
                 f"`noise_scheduler_type` must be one of {supported_noise_schedulers}. "
                 f"Got {self.noise_scheduler_type}."
+            )
+
+        supported_ambient_mask_modes = ["band", "high"]
+        if self.ambient_mask_mode not in supported_ambient_mask_modes:
+            raise ValueError(
+                f"`ambient_mask_mode` must be one of {supported_ambient_mask_modes}. "
+                f"Got {self.ambient_mask_mode}."
             )
 
         if self.resize_shape is not None and (
