@@ -41,7 +41,7 @@ jobs:
           token="$(curl -sf -X POST             -H "Authorization: Bearer ${{ secrets.REMYX_API_KEY }}"             -H "Content-Type: application/json"             -d "{\"repo\": \"${{ github.repository }}\"}"             "https://engine.remyx.ai/api/v1.0/github/installation-token"             | python3 -c "import sys, json; print(json.load(sys.stdin).get('token', ''))")" || token=""
           echo "::add-mask::$token"
           echo "token=$token" >> "$GITHUB_OUTPUT"
-      - uses: remyxai/outrider@v1
+      - uses: remyxai/outrider@salma/remyx-146-issue-convention-pass
         with:
           interest-id: 7568212e-7f42-4caa-86eb-a6bb90885b33
           # remyx[bot] token (empty → action falls back to GITHUB_TOKEN).
