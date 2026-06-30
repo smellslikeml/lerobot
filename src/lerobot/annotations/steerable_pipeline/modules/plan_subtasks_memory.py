@@ -28,6 +28,10 @@ from ..frames import (
     null_provider,
     to_contact_sheet_blocks,
 )
+from ..kinematic_boundaries import (
+    detect_kinematic_boundaries,
+    snap_spans_to_kinematic_boundaries,
+)
 from ..prompts import load as load_prompt
 from ..reader import EpisodeRecord, reconstruct_subtask_spans, snap_to_frame
 from ..staging import EpisodeStaging
@@ -507,7 +511,7 @@ class PlanSubtasksMemoryModule:
         # [t0, t_last] cover.
         cleaned = self._stitch_full_coverage(cleaned, record)
 
-        return cleaned
+        return self._anchor_to_kinematics(cleaned, record)
 
     def _generate_subtasks_windowed(
         self, record: EpisodeRecord, task: str, window_s: float
@@ -542,7 +546,7 @@ class PlanSubtasksMemoryModule:
         cleaned = self._clean_spans(all_spans, record)
         if not cleaned:
             return []
-        return self._stitch_full_coverage(cleaned, record)
+        return self._anchor_to_kinematics(self._stitch_full_coverage(cleaned, record), record)
 
     def _subtasks_for_window(
         self, record: EpisodeRecord, task: str, w0: float, w1: float
@@ -622,6 +626,43 @@ class PlanSubtasksMemoryModule:
             if float(s["end"]) < float(s["start"]):
                 s["end"] = float(s["start"])
         return spans
+
+    def _anchor_to_kinematics(
+        self, spans: list[dict[str, Any]], record: EpisodeRecord
+    ) -> list[dict[str, Any]]:
+        """Snap VLM subtask starts to end-effector kinematic boundaries (InSight).
+
+        VLM segmentation from contact sheets puts boundaries roughly where a
+        primitive changes; the recorded ``observation.state`` / ``action``
+        trace says exactly when the gripper opened/closed or the arm paused.
+        Snapping the starts onto those events makes each primitive begin on the
+        frame the world state actually changed. Disabled by default and a
+        no-op whenever the episode carries no usable state column, so the
+        purely-visual behaviour is unchanged unless opted in.
+        """
+        if not self.config.snap_subtasks_to_kinematics or len(spans) < 2:
+            return spans
+        try:
+            boundaries = detect_kinematic_boundaries(
+                record.frames_df(),
+                record.frame_timestamps,
+                state_keys=self.config.kinematic_state_keys,
+                gripper_index=self.config.kinematic_gripper_index,
+            )
+        except Exception as exc:  # noqa: BLE001 - kinematics are best-effort grounding
+            logger.warning("episode %d: kinematic anchoring skipped (%s)", record.episode_index, exc)
+            return spans
+        if not boundaries:
+            return spans
+        snapped = snap_spans_to_kinematic_boundaries(
+            spans, boundaries, tolerance_s=self.config.kinematic_snap_tolerance_s
+        )
+        # Re-snap onto distinct source frames and re-close gaps: snapping can
+        # push two starts onto one boundary, which the renderer can't resolve.
+        deduped = self._dedupe_starts_to_distinct_frames(
+            sorted(snapped, key=lambda s: float(s["start"])), record
+        )
+        return self._stitch_full_coverage(deduped, record)
 
     @staticmethod
     def _with_causal_rules(prompt: str) -> str:
