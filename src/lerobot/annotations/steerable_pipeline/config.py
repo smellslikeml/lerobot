@@ -74,6 +74,20 @@ class PlanConfig:
 
     # (subtask spans are always stitched to a contiguous full-episode cover; not configurable.)
 
+    # --- Kinematic boundary anchoring (InSight Stage-1) --------------------
+    # When on, VLM subtask starts are snapped to the nearest end-effector
+    # kinematic event (gripper open/close transition or motion pause) within
+    # ``kinematic_snap_tolerance_s``, so a primitive begins on the exact frame
+    # the world state changes. No-op when the episode has no usable state
+    # column. Off by default (purely VLM/contact-sheet behaviour unchanged).
+    snap_subtasks_to_kinematics: bool = False
+    # Per-frame vector columns tried in order for the kinematic trace.
+    kinematic_state_keys: tuple[str, ...] = ("observation.state", "action")
+    # Channel within the state vector holding the gripper (default: last).
+    kinematic_gripper_index: int = -1
+    # Max distance a VLM start may move to reach a kinematic boundary.
+    kinematic_snap_tolerance_s: float = 0.5
+
     # Optional EgoMimic-style 5-axis task augmentation; replaces n_task_rephrasings.
     task_aug_axes: TaskAugAxesConfig = field(default_factory=lambda: TaskAugAxesConfig())
 
