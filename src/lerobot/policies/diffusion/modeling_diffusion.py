@@ -49,6 +49,7 @@ from ..utils import (
     get_output_shape,
     populate_queues,
 )
+from .ambient_loss_mask import compute_ambient_loss_mask
 from .configuration_diffusion import DiffusionConfig
 
 
@@ -372,6 +373,10 @@ class DiffusionModel(nn.Module):
 
         loss = F.mse_loss(pred, target, reduction="none")
 
+        # Per-element loss mask, accumulated across the masking criteria below. Starts
+        # all-ones so that with no masking enabled this reduces to `loss.mean()`.
+        mask = torch.ones_like(loss)
+
         # Mask loss wherever the action is padded with copies (edges of the dataset trajectory).
         if self.config.do_mask_loss_for_padding:
             if "action_is_pad" not in batch:
@@ -379,12 +384,21 @@ class DiffusionModel(nn.Module):
                     "You need to provide 'action_is_pad' in the batch when "
                     f"{self.config.do_mask_loss_for_padding=}."
                 )
-            in_episode_bound = ~batch["action_is_pad"]
-            mask = in_episode_bound.unsqueeze(-1)
-            num_valid = mask.sum() * loss.shape[-1]
-            return (loss * mask).sum() / num_valid.clamp_min(1)
+            mask = mask * (~batch["action_is_pad"]).unsqueeze(-1)
 
-        return loss.mean()
+        # Ambient Diffusion Policy: restrict suboptimal/OOD samples to the diffusion
+        # times where their signal is trustworthy (noise-dependent data usage).
+        if self.config.use_ambient_loss_masking:
+            ambient_weight = compute_ambient_loss_mask(
+                timesteps,
+                batch.get(self.config.ambient_quality_key),
+                num_train_timesteps=self.noise_scheduler.config.num_train_timesteps,
+                mode=self.config.ambient_mask_mode,
+            )
+            mask = mask * ambient_weight.reshape(-1, *([1] * (loss.ndim - 1)))
+
+        num_valid = mask.sum()
+        return (loss * mask).sum() / num_valid.clamp_min(1)
 
 
 class SpatialSoftmax(nn.Module):
