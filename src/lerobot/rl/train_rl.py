@@ -39,6 +39,11 @@ class TrainRLServerPipelineConfig(TrainPipelineConfig):
     mixer: str = "online_offline"
     # Fraction sampled from online replay when using OnlineOfflineMixer.
     online_ratio: float = 0.5
+    # Optional policy-paced online/offline ratio schedule ("linear" or "cosine").
+    # When set, the online fraction is annealed from ``online_ratio`` toward 1.0
+    # over ``policy.online_steps`` (Policy-Paced Learning, adapted from
+    # WorldSample) instead of being held fixed. ``None`` keeps a fixed ratio.
+    online_ratio_schedule: str | None = None
 
     def validate(self) -> None:
         super().validate()

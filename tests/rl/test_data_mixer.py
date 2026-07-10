@@ -87,3 +87,75 @@ def test_online_offline_mixer_iterator():
     batch2 = next(it)
     assert batch1["state"][OBS_STATE].shape[0] == 4
     assert batch2["state"][OBS_STATE].shape[0] == 4
+
+
+def _make_zero_reward_buffer(capacity: int = 100, state_dim: int = 4) -> ReplayBuffer:
+    """Offline-style buffer whose rewards are all 0.0 (tags offline rows)."""
+    buf = ReplayBuffer(
+        capacity=capacity,
+        device="cpu",
+        state_keys=[OBS_STATE],
+        storage_device="cpu",
+        use_drq=False,
+    )
+    for i in range(capacity):
+        buf.add(
+            state={OBS_STATE: torch.randn(state_dim)},
+            action=torch.randn(2),
+            reward=0.0,
+            next_state={OBS_STATE: torch.randn(state_dim)},
+            done=bool(i % 10 == 9),
+            truncated=False,
+        )
+    return buf
+
+
+def test_policy_paced_mixer_anneals_online_ratio():
+    """PolicyPacedMixer shifts the online/offline split from start to end ratio.
+
+    Online rows carry reward 1.0 and offline rows 0.0, so the mean reward of a
+    sampled batch equals the online fraction exactly. Asserts the mix is
+    offline-heavy early and online-heavy once the schedule completes -- the
+    regulation Policy-Paced Learning (adapted from WorldSample) prescribes --
+    by driving the existing OnlineOfflineMixer with a paced ratio.
+    """
+    from lerobot.rl.data_sources.policy_paced_mixer import PolicyPacedMixer
+
+    online = _make_buffer(capacity=64)  # reward == 1.0
+    offline = _make_zero_reward_buffer(capacity=64)  # reward == 0.0
+    mixer = PolicyPacedMixer(
+        online_buffer=online,
+        offline_buffer=offline,
+        schedule="linear",
+        total_steps=10,
+        start_ratio=0.2,
+        end_ratio=1.0,
+    )
+
+    early = mixer.sample(batch_size=20)
+    early_online_frac = early["reward"].mean().item()
+    assert early_online_frac == pytest.approx(0.2, abs=0.05)
+    assert mixer.online_ratio < 0.5
+
+    # Drain the schedule well past its horizon so the ratio clamps at the end.
+    late = early
+    for _ in range(20):
+        late = mixer.sample(batch_size=20)
+    late_online_frac = late["reward"].mean().item()
+    assert late_online_frac == pytest.approx(1.0, abs=0.05)
+    assert mixer.online_ratio == pytest.approx(1.0)
+    assert late_online_frac > early_online_frac
+
+
+def test_policy_paced_mixer_rejects_unknown_schedule():
+    """An unknown schedule name raises a clear error."""
+    from lerobot.rl.data_sources.policy_paced_mixer import PolicyPacedMixer
+
+    online = _make_buffer(capacity=8)
+    with pytest.raises(ValueError, match="Unknown online_ratio_schedule"):
+        PolicyPacedMixer(
+            online_buffer=online,
+            offline_buffer=None,
+            schedule="bogus",
+            total_steps=1,
+        )

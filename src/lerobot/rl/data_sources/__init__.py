@@ -15,5 +15,6 @@
 from lerobot.types import BatchType
 
 from .data_mixer import DataMixer, OnlineOfflineMixer
+from .policy_paced_mixer import PolicyPacedMixer
 
-__all__ = ["BatchType", "DataMixer", "OnlineOfflineMixer"]
+__all__ = ["BatchType", "DataMixer", "OnlineOfflineMixer", "PolicyPacedMixer"]

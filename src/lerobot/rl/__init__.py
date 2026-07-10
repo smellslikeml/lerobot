@@ -27,7 +27,11 @@ from .algorithms.factory import (
 )
 from .algorithms.sac.configuration_sac import SACAlgorithmConfig as SACAlgorithmConfig
 from .buffer import ReplayBuffer as ReplayBuffer
-from .data_sources import DataMixer as DataMixer, OnlineOfflineMixer as OnlineOfflineMixer
+from .data_sources import (
+    DataMixer as DataMixer,
+    OnlineOfflineMixer as OnlineOfflineMixer,
+    PolicyPacedMixer as PolicyPacedMixer,
+)
 from .trainer import RLTrainer as RLTrainer
 
 __all__ = [
@@ -41,4 +45,5 @@ __all__ = [
     "ReplayBuffer",
     "DataMixer",
     "OnlineOfflineMixer",
+    "PolicyPacedMixer",
 ]

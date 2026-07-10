@@ -355,12 +355,26 @@ def add_actor_information_and_train(
             storage_device=storage_device,
         )
 
-    # DataMixer: online-only or online/offline 50-50 mix
-    data_mixer = OnlineOfflineMixer(
-        online_buffer=replay_buffer,
-        offline_buffer=offline_replay_buffer,
-        online_ratio=cfg.online_ratio,
-    )
+    # DataMixer: online-only or online/offline mix. When a policy-paced
+    # schedule is configured, the online fraction is annealed over training
+    # (Policy-Paced Learning, adapted from WorldSample) instead of held fixed.
+    if getattr(cfg, "online_ratio_schedule", None):
+        from .data_sources.policy_paced_mixer import PolicyPacedMixer
+
+        data_mixer = PolicyPacedMixer(
+            online_buffer=replay_buffer,
+            offline_buffer=offline_replay_buffer,
+            schedule=cfg.online_ratio_schedule,
+            total_steps=max(1, int(cfg.policy.online_steps)),
+            start_ratio=cfg.online_ratio,
+            end_ratio=1.0,
+        )
+    else:
+        data_mixer = OnlineOfflineMixer(
+            online_buffer=replay_buffer,
+            offline_buffer=offline_replay_buffer,
+            online_ratio=cfg.online_ratio,
+        )
     # RLTrainer owns the iterator, preprocessor, and creates optimizers.
     trainer = RLTrainer(
         algorithm=algorithm,
