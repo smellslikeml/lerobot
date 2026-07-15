@@ -23,6 +23,7 @@ from .optimizers import (
     load_optimizer_state_dict,
     save_optimizer_state,
 )
+from .rp_lora import RPLoRAAdamWConfig as RPLoRAAdamWConfig
 from .schedulers import (
     CosineDecayWithWarmupSchedulerConfig as CosineDecayWithWarmupSchedulerConfig,
     DiffuserSchedulerConfig as DiffuserSchedulerConfig,
@@ -42,6 +43,7 @@ __all__ = [
     "AdamWConfig",
     "MultiAdamConfig",
     "OptimizerConfig",
+    "RPLoRAAdamWConfig",
     "SGDConfig",
     "XVLAAdamWConfig",
     # Scheduler configs
